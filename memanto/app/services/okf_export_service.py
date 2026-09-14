@@ -41,6 +41,56 @@ from memanto.app.utils.validation import validate_output_path, validate_safe_id
 # appear inside a document body (e.g. the migrate ``[Supporting data]`` footer).
 ENTRY_DELIMITER = "<!-- okf-entry -->"
 
+
+def encode_okf_delimiter(text: str) -> str:
+    """Bijectively escape OKF entry delimiters by prepending a backslash.
+
+    Any pattern matching ``<!-- (\\*)okf-entry -->`` receives one additional
+    backslash. This ensures that ``<!-- okf-entry -->`` (zero backslashes) never
+    appears in encoded content, while preserving existing escaped sequences.
+    """
+    return re.sub(
+        r"<!-- (\\*)okf-entry -->",
+        r"<!-- \\\1okf-entry -->",
+        text,
+    )
+
+
+def decode_okf_delimiter(text: str) -> str:
+    """Bijectively unescape OKF entry delimiters by removing one backslash.
+
+    Any pattern matching ``<!-- \\(\\*)okf-entry -->`` (at least one backslash)
+    has one leading backslash removed.
+    """
+    return re.sub(
+        r"<!-- \\(\\*)okf-entry -->",
+        r"<!-- \1okf-entry -->",
+        text,
+    )
+
+
+def encode_okf_data(obj: Any) -> Any:
+    """Recursively encode OKF delimiters across nested data structures."""
+    if isinstance(obj, str):
+        return encode_okf_delimiter(obj)
+    if isinstance(obj, dict):
+        return {k: encode_okf_data(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [encode_okf_data(v) for v in obj]
+    return obj
+
+
+def decode_okf_data(obj: Any) -> Any:
+    """Recursively decode OKF delimiters across nested data structures."""
+    if isinstance(obj, str):
+        return decode_okf_delimiter(obj)
+    if isinstance(obj, dict):
+        return {k: decode_okf_data(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [decode_okf_data(v) for v in obj]
+    return obj
+
+
 # Default: collapse a type into a single stacked file once it exceeds this many
 # memories (see the ``auto`` split mode).
 DEFAULT_SPLIT_THRESHOLD = 50
@@ -370,8 +420,7 @@ class OkfExportService:
     def _render_okf_doc(self, mem: dict[str, Any], mem_type: str) -> str:
         """Render a single memory dict as one OKF markdown document."""
         content = (mem.get("content") or "").strip()
-        if ENTRY_DELIMITER in content:
-            content = content.replace(ENTRY_DELIMITER, "<!-- \\okf-entry -->")
+        content = encode_okf_delimiter(content)
         title = mem.get("title") or "Untitled"
 
         frontmatter: dict[str, Any] = {"type": mem_type, "title": title}
@@ -428,6 +477,7 @@ class OkfExportService:
         x_memanto["type"] = mem_type
         frontmatter["x_memanto"] = x_memanto
 
+        frontmatter = encode_okf_data(frontmatter)
         front = yaml.safe_dump(
             frontmatter,
             sort_keys=False,
