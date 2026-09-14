@@ -154,6 +154,8 @@ def _parse_entry(chunk: str, file_path: Path, rel_base: Path) -> dict[str, Any] 
         frontmatter, body = {}, chunk
 
     body = body.strip()
+    if "<!-- \\okf-entry -->" in body:
+        body = body.replace("<!-- \\okf-entry -->", ENTRY_DELIMITER)
 
     # Skip navigation index documents.
     if str(frontmatter.get("type", "")).strip().lower() == "index":
