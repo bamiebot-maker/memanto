@@ -71,6 +71,35 @@ class TestValidateOutputPath:
         with pytest.raises(HTTPException):
             self.fn("/root/.ssh/authorized_keys", base_dir=self._base(tmp_path))
 
+    def test_root_directory_target_rejected(self, tmp_path):
+        from fastapi import HTTPException
+
+        base = self._base(tmp_path)
+        with pytest.raises(HTTPException) as exc:
+            self.fn(".", base_dir=base)
+        assert exc.value.status_code == 400
+        assert "root storage directory" in exc.value.detail
+
+        with pytest.raises(HTTPException) as exc2:
+            self.fn(str(base), base_dir=base)
+        assert exc2.value.status_code == 400
+
+    def test_reserved_internal_targets_rejected(self, tmp_path):
+        from fastapi import HTTPException
+
+        base = self._base(tmp_path)
+        for target in [
+            "agents/victim.json",
+            "sessions/active.json",
+            "config.json",
+            "secret_key",
+            ".env",
+        ]:
+            with pytest.raises(HTTPException) as exc:
+                self.fn(target, base_dir=base)
+            assert exc.value.status_code == 400
+            assert "reserved internal path" in exc.value.detail
+
 
 class TestDailyAnalysisOutputPath:
     """validate_output_path is called from DailyAnalysisService.generate_summary."""

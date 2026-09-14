@@ -31,6 +31,7 @@ from typing import Any
 
 import yaml  # type: ignore[import-untyped]
 
+from memanto.app.config import get_data_dir
 from memanto.app.services.memory_export_service import MEMORY_TYPE_ORDER
 from memanto.app.utils.atomic_write import okf_bundle_lock
 from memanto.app.utils.validation import validate_output_path, validate_safe_id
@@ -56,7 +57,7 @@ class OkfExportService:
     """Formats and writes an OKF bundle for an agent."""
 
     def __init__(self, exports_dir: Path | None = None):
-        self.exports_dir = exports_dir or (Path.home() / ".memanto" / "exports")
+        self.exports_dir = exports_dir or (get_data_dir() / "exports")
 
     # Public API
     def write_okf_bundle(
@@ -369,6 +370,8 @@ class OkfExportService:
     def _render_okf_doc(self, mem: dict[str, Any], mem_type: str) -> str:
         """Render a single memory dict as one OKF markdown document."""
         content = (mem.get("content") or "").strip()
+        if ENTRY_DELIMITER in content:
+            content = content.replace(ENTRY_DELIMITER, "<!-- \\okf-entry -->")
         title = mem.get("title") or "Untitled"
 
         frontmatter: dict[str, Any] = {"type": mem_type, "title": title}
@@ -465,7 +468,10 @@ class OkfExportService:
             f"# {heading}",
             "",
         ]
-        lines += [f"- [{text}]({rel})" for text, rel in links]
+        for text, rel in links:
+            safe_text = " ".join(str(text or "").split()) or "Untitled"
+            safe_text = safe_text.replace("[", "&#91;").replace("]", "&#93;")
+            lines.append(f"- [{safe_text}]({rel})")
         lines.append("")
         (directory / "index.md").write_text("\n".join(lines), encoding="utf-8")
 
